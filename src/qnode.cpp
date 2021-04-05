@@ -10,6 +10,18 @@
 ** Includes
 *****************************************************************************/
 
+/***********************************************************************************************************
+  ROS人机交互软件,'RobotOne'
+（1）新建地图、保存地图、编辑地图
+（2）设置单点导航、多点巡航、保存设置内容
+（3）类rviz设计，可视化操作
+（4）键盘控制节点
+（5）自定义功能、自定义单点导航名字
+  =============公众号：小白学移动机器人========================================================================
+  欢迎关注公众号，从此学习的路上变得不再孤单，加油！奥利给！！！
+  修改时间：2021年04月05日
+***********************************************************************************************************/
+
 #include <ros/ros.h>
 #include <ros/network.h>
 #include <string>
@@ -100,6 +112,7 @@ void QNode::run() {
 	Q_EMIT rosShutdown(); // used to signal the gui for a shutdown (useful to roslaunch)
 }
 
+//打印log相关
 void QNode::log( const LogLevel &level, const std::string &msg) {
 	logging_model.insertRows(logging_model.rowCount(),1);
 	std::stringstream logging_model_msg;
@@ -135,6 +148,7 @@ void QNode::log( const LogLevel &level, const std::string &msg) {
 	Q_EMIT loggingUpdated(); // used to readjust the scrollbar
 }
 
+//键盘控制-设置速度相关
 void QNode::set_cmd_vel(char k,float linear,float angular)
 {
     // Map for movement keys
@@ -180,6 +194,7 @@ void QNode::set_cmd_vel(char k,float linear,float angular)
     cmd_vel_pub.publish(twist);
 }
 
+//发布单个导航点
 void QNode::set_goal(double x,double y,double z,double w)
 {
     geometry_msgs::PoseStamped goal;
@@ -195,6 +210,7 @@ void QNode::set_goal(double x,double y,double z,double w)
     goal_pub.publish(goal);
 }
 
+//获得多点巡航的目标信息
 void QNode::get_points_nav_info(std::vector<geometry_msgs::Pose> points_list,int times,int stop_time,bool next_state)
 {
   run_points_nav_mutex_.lock();
@@ -213,6 +229,7 @@ void QNode::get_points_nav_info(std::vector<geometry_msgs::Pose> points_list,int
 //  qDebug()<<"points_nav_next_state"<<points_nav_next_state;
 }
 
+//发布多点导航开始标志
 void QNode::pub_points_nav_start_flag(bool flag)
 {
   std_msgs::Bool sendBool;
@@ -220,6 +237,7 @@ void QNode::pub_points_nav_start_flag(bool flag)
   points_nav_pub.publish(sendBool);
 }
 
+//多点巡航-下一站按钮状态
 void QNode::set_points_nav_next_btn_click()
 {
   run_points_nav_mutex_.lock();
@@ -227,6 +245,7 @@ void QNode::set_points_nav_next_btn_click()
   run_points_nav_mutex_.unlock();
 }
 
+//停止多点巡航
 void QNode::set_stop_points_nav(bool flag)
 {
   run_points_nav_mutex_.lock();
@@ -234,6 +253,7 @@ void QNode::set_stop_points_nav(bool flag)
   run_points_nav_mutex_.unlock();
 }
 
+//多点巡航线程任务
 void QNode::run_points_nav(bool flag)
 {
   ros::Time lastTime,nowTime;
@@ -323,12 +343,14 @@ void QNode::run_points_nav(bool flag)
   }
 }
 
+//开辟多点巡航的线程
 void QNode::run_points_nav_callback(const std_msgs::Bool::ConstPtr& msg)
 {
 //  qDebug() << "msg->data"<<msg->data;
   run_points_nav_thread_ = new boost::thread(boost::bind(&QNode::run_points_nav, this, msg->data));
 }
 
+//相关marker
 visualization_msgs::Marker arrow;
 visualization_msgs::Marker number;
 void QNode::single_goal_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)

@@ -1,9 +1,20 @@
+/***********************************************************************************************************
+  ROS人机交互软件,'RobotOne'
+（1）新建地图、保存地图、编辑地图
+（2）设置单点导航、多点巡航、保存设置内容
+（3）类rviz设计，可视化操作
+（4）键盘控制节点
+（5）自定义功能、自定义单点导航名字
+  =============公众号：小白学移动机器人========================================================================
+  欢迎关注公众号，从此学习的路上变得不再孤单，加油！奥利给！！！
+  修改时间：2021年04月05日
+***********************************************************************************************************/
+
 #include "../include/robot_one/qrviz.hpp"
 
 #include <QDebug>
 #include <QException>
 
-//
 QRviz::QRviz(QVBoxLayout* layout)
 {
   //创建rviz panel
@@ -23,13 +34,13 @@ QRviz::QRviz(QVBoxLayout* layout)
   manager_->startUpdate();
   manager_->removeAllDisplays();
 }
-//
+
 void QRviz::Set_FixedFrame(QString Frame_name)
 {
     manager_->setFixedFrame(Frame_name);
     qDebug()<<manager_->getFixedFrame();
 }
-//
+
 void QRviz::Display_Grid(int Cell_Count,QColor color,bool enable)
 {
     if(Grid_!=NULL)
@@ -44,7 +55,7 @@ void QRviz::Display_Grid(int Cell_Count,QColor color,bool enable)
     Grid_->subProp("Color")->setValue(color);
     ROS_ASSERT(Grid_!=NULL);
 }
-//
+
 void QRviz::Display_TF(bool enable)
 {
     if(TF_!=NULL)
@@ -55,7 +66,7 @@ void QRviz::Display_TF(bool enable)
     TF_=manager_->createDisplay("rviz/TF","myTF",enable);
     ROS_ASSERT(TF_!=NULL);
 }
-//
+
 void QRviz::Display_LaserScan(QString laser_topic,bool enable)
 {
     if(LaserScan_!=NULL)
@@ -67,7 +78,7 @@ void QRviz::Display_LaserScan(QString laser_topic,bool enable)
     LaserScan_->subProp("Topic")->setValue(laser_topic);
     ROS_ASSERT(LaserScan_!=NULL);
 }
-//
+
 void QRviz::Display_Map(QString topic,QString color_scheme,bool enable)
 {
     if(Map_!=NULL)
@@ -80,7 +91,7 @@ void QRviz::Display_Map(QString topic,QString color_scheme,bool enable)
     Map_->subProp("Topic")->setValue(topic);
     Map_->subProp("Color Scheme")->setValue(color_scheme);
 }
-//
+
 void QRviz::Display_Marker(QString marker_topic,bool enable)
 {
     if(Marker_!=NULL)
@@ -93,7 +104,7 @@ void QRviz::Display_Marker(QString marker_topic,bool enable)
     Marker_->subProp("Marker Topic")->setValue(marker_topic);
 //    qDebug()<< "test Display_Marker";
 }
-//
+
 void QRviz::Set_Start_Pose()
 {
     rviz::Tool* current_tool_=tool_manager_->addTool("rviz/SetInitialPose");
@@ -101,7 +112,7 @@ void QRviz::Set_Start_Pose()
     //设置当前使用的工具
     tool_manager_->setCurrentTool(current_tool_);
 }
-//
+
 void QRviz::Set_single_nav_Pose()
 {
      rviz::Tool* current_tool_=tool_manager_->addTool("rviz/SetGoal");
@@ -113,7 +124,7 @@ void QRviz::Set_single_nav_Pose()
      //设置当前使用的工具
      tool_manager_->setCurrentTool(current_tool_);
 }
-//
+
 void QRviz::Set_points_nav_Pose()
 {
     rviz::Tool* current_tool_=tool_manager_->addTool("rviz/SetGoal");
@@ -125,7 +136,7 @@ void QRviz::Set_points_nav_Pose()
     //设置当前使用的工具
     tool_manager_->setCurrentTool(current_tool_);
 }
-//
+
 void QRviz::Set_back_nav_Pose()
 {
     rviz::Tool* current_tool_=tool_manager_->addTool("rviz/SetGoal");

@@ -9,6 +9,18 @@
 ** Includes
 *****************************************************************************/
 
+/***********************************************************************************************************
+  ROS人机交互软件,'RobotOne'
+（1）新建地图、保存地图、编辑地图
+（2）设置单点导航、多点巡航、保存设置内容
+（3）类rviz设计，可视化操作
+（4）键盘控制节点
+（5）自定义功能、自定义单点导航名字
+  =============公众号：小白学移动机器人========================================================================
+  欢迎关注公众号，从此学习的路上变得不再孤单，加油！奥利给！！！
+  修改时间：2021年04月05日
+***********************************************************************************************************/
+
 #include <QtGui>
 #include <QMessageBox>
 #include <iostream>
@@ -22,6 +34,7 @@ namespace robot_one {
 
 using namespace Qt;
 
+//一些全局变量
 QImage *img_robot_connect_state = new QImage;
 QImage *img_nav_state_1 = new QImage;
 QImage *img_nav_state_2 = new QImage;
@@ -56,19 +69,19 @@ MainWindow::MainWindow(int argc, char** argv, QWidget *parent)
 	ui.view_logging->setModel(qnode.loggingModel());
   QObject::connect(&qnode, SIGNAL(loggingUpdated()), this, SLOT(updateLoggingView()));
 
-  //set main window name
+  //设置主窗口的名字
   this->setWindowTitle("Robot_One - 公众号:小白学移动机器人，关注公众号，获得更多优秀内容！");
   //未开启rosmaster
   roscore_state = false;
-  //image offline
+  //默认离线图片
   img_robot_connect_state->load("://images/offline.png");
-  //set img on label
+  //设置图片在标签上显示
   ui.label_connect_state->setPixmap(QPixmap::fromImage(*img_robot_connect_state));
 
   //设置 checkBox next默认状态
   ui.checkBox_nav_next_flag->setCheckState(Checked);
 
-  //不激活相关按钮
+  //默认不激活相关按钮
   setButtonsEnable(false);
 
   //将导航路径画出来
@@ -80,12 +93,14 @@ MainWindow::MainWindow(int argc, char** argv, QWidget *parent)
   if ( ui.checkbox_remember_settings->isChecked() ) {
       on_button_connect_clicked();
   }
-  //按键控制部分
+
+  //========================================按键控制部分===================================
+
   ui.horizontalSlider_linera->setValue(25);
   ui.horizontalSlider_raw->setValue(50);
   ui.label_linera->setText("25");
   ui.label_raw->setText("50");
-
+  //线速度和角速度的进度条
   connect(ui.horizontalSlider_linera,SIGNAL(valueChanged(int)),this,SLOT(slot_linera_value_change(int)));
   connect(ui.horizontalSlider_raw,SIGNAL(valueChanged(int)),this,SLOT(slot_raw_value_change(int)));
 
@@ -107,7 +122,10 @@ MainWindow::MainWindow(int argc, char** argv, QWidget *parent)
   connect(ui.pushButton_br,SIGNAL(released()),this,SLOT(slot_ctrl_btn_release()));
   connect(ui.pushButton_u, SIGNAL(released()),this,SLOT(slot_ctrl_btn_release()));
   connect(ui.pushButton_o, SIGNAL(released()),this,SLOT(slot_ctrl_btn_release()));
-  //设置按钮图标
+
+
+  //=====================================设置按钮图标======================================
+
   ui.new_map_btn->setIcon(QIcon("://images/classes/Map.png"));
   ui.save_map_btn->setIcon(QIcon("://images/default_package_icon.png"));
   ui.edit_map_btn->setIcon(QIcon("://images/classes/Image.png"));
@@ -126,7 +144,8 @@ MainWindow::MainWindow(int argc, char** argv, QWidget *parent)
   ui.next_nav_points_btn->setIcon(QIcon("://images/Navigate.png"));
   ui.back_nav_points_btn->setIcon(QIcon("://images/return.png"));
 
-  //设置单点导航按钮名称
+  //==================================设置单点导航按钮名称===================================
+
   ui.A01_btn->setText(ui.textEdit_A01->toPlainText());
   ui.A02_btn->setText(ui.textEdit_A02->toPlainText());
   ui.A03_btn->setText(ui.textEdit_A03->toPlainText());
@@ -320,6 +339,7 @@ void MainWindow::showNoMasterMessage() {
   close();
 }
 
+//按钮使能
 void MainWindow::setButtonsEnable(bool state)
 {
   ui.new_map_btn->setEnabled(state);
@@ -359,6 +379,7 @@ void MainWindow::setButtonsEnable(bool state)
   ui.D03_btn->setEnabled(state);
 }
 
+//将多点导航的路径绘制出来
 void MainWindow::drawNavPath()
 {
   if(points_nav_goals.size())
@@ -394,6 +415,7 @@ void MainWindow::drawNavPath()
  * These triggers whenever the button is clicked, regardless of whether it
  * is already checked or not.
  */
+
 
 void MainWindow::on_button_connect_clicked() {
 
@@ -651,6 +673,7 @@ void MainWindow::on_actionAbout_triggered() {
 ** Implementation [Configuration]
 *****************************************************************************/
 
+//读取历史设置
 void MainWindow::ReadSettings() {
     QSettings settings("Qt-Ros Package", "robot_one");
     restoreGeometry(settings.value("geometry").toByteArray());
@@ -717,6 +740,7 @@ void MainWindow::ReadSettings() {
 
 }
 
+//保存设置
 void MainWindow::WriteSettings() {
     QSettings settings("Qt-Ros Package", "robot_one");
     settings.setValue("master_url",ui.line_edit_master->text());
@@ -795,7 +819,7 @@ void robot_one::MainWindow::slot_quick_output()
       ui.textEdit_bash_output->append("<font color=\"#FFFFFF\">"+launch_stop_nav_cmd->readAllStandardOutput()+"</font>");
 }
 
-//new_map_btn
+//new map btn
 void robot_one::MainWindow::on_new_map_btn_clicked()
 {
   new_map_cmd->start("bash");
@@ -811,7 +835,7 @@ void robot_one::MainWindow::on_new_map_btn_clicked()
 
 }
 
-//save_map_btn
+//save map btn
 void robot_one::MainWindow::on_save_map_btn_clicked()
 {
   save_map_cmd->start("bash");
@@ -822,7 +846,7 @@ void robot_one::MainWindow::on_save_map_btn_clicked()
   connect(save_map_cmd,SIGNAL(readyReadStandardOutput()),this,SLOT(slot_quick_output()));
 }
 
-//edit_map_btn
+//edit map btn
 void robot_one::MainWindow::on_edit_map_btn_clicked()
 {
   MyPaint *w = new MyPaint();
