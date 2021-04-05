@@ -105,5 +105,6 @@
         <file>images/move2d.png</file>
         <file>images/cursor.png</file>
         <file>images/rotate.png</file>
+        <file>png/gongzhonghao.png</file>
     </qresource>
 </RCC>

@@ -227,8 +227,17 @@ void QNode::set_points_nav_next_btn_click()
   run_points_nav_mutex_.unlock();
 }
 
+void QNode::set_stop_points_nav(bool flag)
+{
+  run_points_nav_mutex_.lock();
+  stop_points_nav_flag = flag;
+  run_points_nav_mutex_.unlock();
+}
+
 void QNode::run_points_nav(bool flag)
 {
+  ros::Time lastTime,nowTime;
+
   if(flag)
   {
     actionlib::SimpleActionClient<move_base_msgs::MoveBaseAction> nav_client("move_base",true);
@@ -244,6 +253,7 @@ void QNode::run_points_nav(bool flag)
       while(run_count_now < pose_list.size())
       {
         run_points_nav_mutex_.lock();
+
         static bool run_once_flag = false;
         if(!run_once_flag)
         {
@@ -273,23 +283,37 @@ void QNode::run_points_nav(bool flag)
             }
           }
           run_once_flag = true;
+          lastTime = nowTime = ros::Time::now();
+          //qDebug()<<"ros::Time::now()"<<nowTime.toSec();
         }
 
-        //没选择-默认自动下一个节点
-        if(!points_nav_next_state) {
-          sleep(static_cast<unsigned int>(points_nav_stop_time));
-          run_count_now++;
-          run_once_flag = false;
-        }
-        else //选择-手动下一个节点
+        //默认不暂停巡航任务
+        if(!stop_points_nav_flag)
         {
-          if(points_nav_next_btn_click)
+          //没选择-默认自动下一个节点
+          if(!points_nav_next_state)
           {
-            run_count_now++;
-            points_nav_next_btn_click = false;
-            run_once_flag = false;
+            if(nowTime.toSec() - lastTime.toSec() < points_nav_stop_time)
+            {
+              nowTime = ros::Time::now();
+            }
+            else
+            {
+              run_count_now++;
+              run_once_flag = false;
+            }
+          }
+          else //选择-手动下一个节点
+          {
+            if(points_nav_next_btn_click)
+            {
+              run_count_now++;
+              points_nav_next_btn_click = false;
+              run_once_flag = false;
+            }
           }
         }
+
         run_points_nav_mutex_.unlock();
       }
       run_count_now = 0;

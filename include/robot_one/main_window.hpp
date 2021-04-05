@@ -158,7 +158,6 @@ private:
   QProcess *new_map_cmd;
   QProcess *save_map_cmd;
   QProcess *launch_onepoint_nav_cmd;
-  QProcess *launch_points_nav_cmd;
   QProcess *launch_stop_nav_cmd;
 };
 

@@ -3,7 +3,7 @@
  *
  * @brief Implementation for the qt gui.
  *
- * @date February 2011
+ * @date February 2021
  **/
 /*****************************************************************************
 ** Includes
@@ -57,7 +57,7 @@ MainWindow::MainWindow(int argc, char** argv, QWidget *parent)
   QObject::connect(&qnode, SIGNAL(loggingUpdated()), this, SLOT(updateLoggingView()));
 
   //set main window name
-  this->setWindowTitle("Robot_One - 公众号:小白学移动机器人");
+  this->setWindowTitle("Robot_One - 公众号:小白学移动机器人，关注公众号，获得更多优秀内容！");
   //未开启rosmaster
   roscore_state = false;
   //image offline
@@ -151,6 +151,12 @@ MainWindow::MainWindow(int argc, char** argv, QWidget *parent)
   img->load("://images/robot_start_2.jpg");
   ui.label_start_img->setScaledContents(true);
   ui.label_start_img->setPixmap(QPixmap::fromImage(*img));
+
+  //设置公众号页面图片
+  QImage *img_ad = new QImage;
+  img_ad->load("://png/gongzhonghao.png");
+  ui.label_ad_img->setScaledContents(true);
+  ui.label_ad_img->setPixmap(QPixmap::fromImage(*img_ad));
 
   //设置treeWidget
   //header
@@ -299,8 +305,6 @@ MainWindow::MainWindow(int argc, char** argv, QWidget *parent)
   save_map_cmd=new QProcess;
   launch_onepoint_nav_cmd=new QProcess;
   launch_stop_nav_cmd=new QProcess;
-  launch_points_nav_cmd=new QProcess;
-
 }
 
 MainWindow::~MainWindow() {}
@@ -670,7 +674,6 @@ void MainWindow::ReadSettings() {
     ui.textEdit_new_map->setText(settings.value("textEdit_new_map",QString("default")).toString());
     ui.textEdit_save_map->setText(settings.value("textEdit_save_map",QString("default")).toString());
     ui.textEdit_launch_nav->setText(settings.value("textEdit_launch_nav",QString("default")).toString());
-    ui.textEdit_launch_points_nav->setText(settings.value("textEdit_launch_points_nav",QString("default")).toString());
     ui.textEdit_stop_nav->setText(settings.value("textEdit_stop_nav",QString("default")).toString());
 
     //读-自定义单点导航按钮名称
@@ -728,7 +731,6 @@ void MainWindow::WriteSettings() {
     settings.setValue("textEdit_new_map",ui.textEdit_new_map->toPlainText());
     settings.setValue("textEdit_save_map",ui.textEdit_save_map->toPlainText());
     settings.setValue("textEdit_launch_nav",ui.textEdit_launch_nav->toPlainText());
-    settings.setValue("textEdit_launch_points_nav",ui.textEdit_launch_points_nav->toPlainText());
     settings.setValue("textEdit_stop_nav",ui.textEdit_stop_nav->toPlainText());
 
     //写-自定义单点导航按钮名称
@@ -791,9 +793,6 @@ void robot_one::MainWindow::slot_quick_output()
 
       ui.textEdit_bash_output->append("<font color=\"#FF0000\">"+launch_stop_nav_cmd->readAllStandardError()+"</font>");
       ui.textEdit_bash_output->append("<font color=\"#FFFFFF\">"+launch_stop_nav_cmd->readAllStandardOutput()+"</font>");
-
-      ui.textEdit_bash_output->append("<font color=\"#FF0000\">"+launch_points_nav_cmd->readAllStandardError()+"</font>");
-      ui.textEdit_bash_output->append("<font color=\"#FFFFFF\">"+launch_points_nav_cmd->readAllStandardOutput()+"</font>");
 }
 
 //new_map_btn
@@ -878,7 +877,7 @@ void robot_one::MainWindow::on_backpoints_nav_btn_clicked()
   myrviz->Set_back_nav_Pose();
 }
 
-//launch one nav
+//launch one nav 启动 move_base + AMCL,如果默认启动了，无需再次启动
 void robot_one::MainWindow::on_launch_nav_one_btn_clicked()
 {
   launch_onepoint_nav_cmd->start("bash");
@@ -890,9 +889,11 @@ void robot_one::MainWindow::on_launch_nav_one_btn_clicked()
 
   img_nav_state_1->load("://images/robot2.png");
   ui.label_nav_state_1->setPixmap(QPixmap::fromImage(*img_nav_state_1));
+  //仅可以按一次
+  ui.launch_nav_one_btn->setEnabled(false);
 }
 
-//stop nav
+//stop nav 取消当前导航点
 void robot_one::MainWindow::on_stop_nav_one_btn_clicked()
 {
   launch_stop_nav_cmd->start("bash");
@@ -918,47 +919,49 @@ void robot_one::MainWindow::on_back_nav_one_btn_clicked()
 //launch points nav
 void robot_one::MainWindow::on_launch_nav_points_btn_clicked()
 {
-//  launch_points_nav_cmd->start("bash");
-//  launch_points_nav_cmd->waitForStarted();                         //等待启动完成
-//  launch_points_nav_cmd->write(ui.textEdit_launch_points_nav->toPlainText().toLocal8Bit()+'\n');
+  static bool once_flag = false;
+  if(!once_flag)
+  {
+    //继续巡航
+    ui.launch_nav_points_btn->setText("继续巡航");
+    //创建线程开始标志
+    qnode.pub_points_nav_start_flag(true);
 
-//  connect(launch_points_nav_cmd,SIGNAL(readyReadStandardError()),this, SLOT(slot_quick_output()));
-//  connect(launch_points_nav_cmd,SIGNAL(readyReadStandardOutput()),this,SLOT(slot_quick_output()));
+    //qDebug()<<"points_nav_goals.size()"<<points_nav_goals.size();
 
-  qnode.pub_points_nav_start_flag(true);
+    std::vector<geometry_msgs::Pose> tempPoseList;
+    for (unsigned long i=0;i<points_nav_goals.size();++i) {
+      geometry_msgs::Pose tempPose;
+      tempPose.position.x    = points_nav_goals[i].x;
+      tempPose.position.y    = points_nav_goals[i].y;
+      tempPose.orientation.z = points_nav_goals[i].z;
+      tempPose.orientation.w = points_nav_goals[i].w;
+      tempPoseList.push_back(tempPose);
+    }
 
-  //qDebug()<<"points_nav_goals.size()"<<points_nav_goals.size();
+    qnode.get_points_nav_info(tempPoseList,
+                              ui.lineEdit_points_nav_num->text().toInt(),
+                              ui.lineEdit_points_nav_stop_time->text().toInt(),
+                              ui.checkBox_nav_next_flag->isChecked());
+    //qDebug()<<ui.checkBox_nav_next_flag->isChecked();
 
-  std::vector<geometry_msgs::Pose> tempPoseList;
-  for (unsigned long i=0;i<points_nav_goals.size();++i) {
-    geometry_msgs::Pose tempPose;
-    tempPose.position.x    = points_nav_goals[i].x;
-    tempPose.position.y    = points_nav_goals[i].y;
-    tempPose.orientation.z = points_nav_goals[i].z;
-    tempPose.orientation.w = points_nav_goals[i].w;
-    tempPoseList.push_back(tempPose);
+    once_flag = true;
   }
-
-  qnode.get_points_nav_info(tempPoseList,
-                            ui.lineEdit_points_nav_num->text().toInt(),
-                            ui.lineEdit_points_nav_stop_time->text().toInt(),
-                            ui.checkBox_nav_next_flag->isChecked());
-  //qDebug()<<ui.checkBox_nav_next_flag->isChecked();
+  else
+  {
+    //继续巡航任务
+    qnode.set_stop_points_nav(false);
+  }
 
   img_nav_state_2->load("://images/robot2.png");
   ui.label_nav_state_2->setPixmap(QPixmap::fromImage(*img_nav_state_2));
 }
 
-//stop nav
+//stop nav 暂停当前巡航任务
 void robot_one::MainWindow::on_stop_nav_points_btn_clicked()
 {
-//  launch_stop_nav_cmd->start("bash");
-//  launch_stop_nav_cmd->waitForStarted();                         //等待启动完成
-//  launch_stop_nav_cmd->write(ui.textEdit_stop_nav->toPlainText().toLocal8Bit()+'\n');
-
-//  connect(launch_stop_nav_cmd,SIGNAL(readyReadStandardError()),this, SLOT(slot_quick_output()));
-//  connect(launch_stop_nav_cmd,SIGNAL(readyReadStandardOutput()),this,SLOT(slot_quick_output()));
-
+  //暂停当前巡航任务
+  qnode.set_stop_points_nav(true);
   img_nav_state_2->load("://images/error.png");
   ui.label_nav_state_2->setPixmap(QPixmap::fromImage(*img_nav_state_2));
 }
@@ -966,7 +969,6 @@ void robot_one::MainWindow::on_stop_nav_points_btn_clicked()
 //next flag on nav
 void robot_one::MainWindow::on_next_nav_points_btn_clicked()
 {
-
   qnode.set_points_nav_next_btn_click();
 
   img_nav_state_2->load("://images/Navigate.png");

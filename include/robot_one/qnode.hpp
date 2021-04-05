@@ -35,7 +35,7 @@
 #include <actionlib/client/simple_action_client.h>
 #include <std_msgs/Bool.h>
 #include <boost/thread.hpp>
-#include <unistd.h>
+#include <time.h>
 
 /*****************************************************************************
 ** Namespaces
@@ -60,6 +60,7 @@ public:
   void pub_points_nav_start_flag(bool flag);
   void run_points_nav(bool flag);
   void set_points_nav_next_btn_click();
+  void set_stop_points_nav(bool flag);
 
 	void run();
 
@@ -109,6 +110,7 @@ private:
   boost::thread* run_points_nav_thread_;
   boost::mutex run_points_nav_mutex_;
   void run_points_nav_callback(const std_msgs::Bool::ConstPtr& msg);
+  bool stop_points_nav_flag = false; //默认不暂停巡航任务
 
 };
 
