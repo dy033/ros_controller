@@ -27,6 +27,7 @@
 #include <QSpinBox>
 #include <QDebug>
 #include <vector>
+#include "./CCtrlDashBoard.h"
 
 /*****************************************************************************
 ** Namespace
@@ -62,6 +63,7 @@ public:
   void setButtonsEnable(bool);
   void drawNavPath();
 
+
 public Q_SLOTS:
 	/******************************************
 	** Auto-connections (connectSlotsByName())
@@ -78,8 +80,10 @@ public Q_SLOTS:
     void slot_display_grid(int);
     void slot_display_tf(int);
     void slot_display_laser(int);
+    void slot_display_path(int);
     void slot_display_Map(int);
     void slot_display_marker(int);
+
     void slot_linera_value_change(int);
     void slot_raw_value_change(int);
     void slot_ctrl_btn_press();
@@ -88,6 +92,9 @@ public Q_SLOTS:
     void slot_update_onepoint_nav_pos(double,double,double,double);
     void slot_update_back_nav_pos(double,double,double,double);
     void slot_update_points_nav_pos(double,double,double,double);
+    void slot_show_image(QImage);
+
+
 
   /******************************************
   ** Auto-connections (connectSlotsByName())用官方的写法可以不用写connect函数,可以直接触发槽函数,写了connect函数qt按钮的槽函数跳出两次
@@ -139,6 +146,12 @@ private slots:
     void on_D03_btn_clicked();
 
     void on_checkBox_nav_next_flag_stateChanged(int arg1);
+    void slot_speed_x(double x);
+    void slot_speed_y(double y);
+    void slot_power(float p);
+    void slot_foucs_camera_btn();
+    void slot_select_btn();
+    void slot_position_change(double x,double y,double z,double w);
 
 private:
 	Ui::MainWindowDesign ui;
@@ -149,16 +162,24 @@ private:
   QSpinBox*  Cell_Count_Box;
   QComboBox* Grid_Color_Box;
   QComboBox* Laser_Topic_box;
+  QComboBox* Path_Topic_box;
   QComboBox* Map_Topic_box;
   QComboBox* Map_Color_Scheme_box;
   QComboBox* Marker_Topic_box;
   QCheckBox* Grid_Check;
   QCheckBox* Map_Check;
+  QComboBox* PointCloud2_1_Topic_box;
+  QComboBox* PointCloud2_2_Topic_box;
 
   QProcess *new_map_cmd;
   QProcess *save_map_cmd;
   QProcess *launch_onepoint_nav_cmd;
   QProcess *launch_stop_nav_cmd;
+
+  CCtrlDashBoard *m_DashBoard_x;
+  CCtrlDashBoard *m_DashBoard_y;
+  QTimer *m_timerCurrentTime;
+
 };
 
 }  // namespace robot_one

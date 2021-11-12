@@ -11,21 +11,21 @@
 *****************************************************************************/
 
 /***********************************************************************************************************
-  ROS人机交互软件,'RobotOne'
+
 （1）新建地图、保存地图、编辑地图
 （2）设置单点导航、多点巡航、保存设置内容
 （3）类rviz设计，可视化操作
 （4）键盘控制节点
 （5）自定义功能、自定义单点导航名字
-  =============公众号：小白学移动机器人========================================================================
-  欢迎关注公众号，从此学习的路上变得不再孤单，加油！奥利给！！！
-  修改时间：2021年04月05日
+
 ***********************************************************************************************************/
 
 #include <ros/ros.h>
 #include <ros/network.h>
 #include <string>
 #include <std_msgs/String.h>
+
+#include "../include/robot_one/HunterStatus.h"
 #include <sstream>
 #include "../include/robot_one/qnode.hpp"
 #include <QDebug>
@@ -38,6 +38,7 @@ namespace robot_one {
 /*****************************************************************************
 ** Implementation
 *****************************************************************************/
+
 
 QNode::QNode(int argc, char** argv ) :
 	init_argc(argc),
@@ -60,6 +61,9 @@ bool QNode::init() {
 	ros::start(); // explicitly needed since our nodehandle is going out of scope.
 	ros::NodeHandle n;
 	// Add your ros communications here.
+    QString odom_topic="odom";
+    cmdVel_sub = n.subscribe<nav_msgs::Odometry>(odom_topic.toStdString(),200,&QNode::speedCallback,this);
+
   cmd_vel_pub=n.advertise<geometry_msgs::Twist>("cmd_vel",1000);
   marker_pub =n.advertise<visualization_msgs::Marker>("marker", 100);
   single_goal_sub=n.subscribe("single_goal", 100, &QNode::single_goal_callback,this);
@@ -68,6 +72,8 @@ bool QNode::init() {
   goal_pub=n.advertise<geometry_msgs::PoseStamped>("move_base_simple/goal",100);
   points_nav_pub = n.advertise<std_msgs::Bool>("points_nav_start_flag", 10);
   points_nav_sub = n.subscribe("points_nav_start_flag", 10, &QNode::run_points_nav_callback,this);
+
+
 	start();
 	return true;
 }
@@ -82,15 +88,24 @@ bool QNode::init(const std::string &master_url, const std::string &host_url) {
 	}
 	ros::start(); // explicitly needed since our nodehandle is going out of scope.
 	ros::NodeHandle n;
-	// Add your ros communications here.
-  cmd_vel_pub=n.advertise<geometry_msgs::Twist>("cmd_vel",1000);
-  marker_pub =n.advertise<visualization_msgs::Marker>("marker", 100);
-  single_goal_sub=n.subscribe("single_goal", 100, &QNode::single_goal_callback,this);
-  back_pose_sub  =n.subscribe("back_pose", 100, &QNode::back_pose_callback,this);
-  points_goal_sub=n.subscribe("points_goal", 100, &QNode::points_goal_callback,this);
-  goal_pub=n.advertise<geometry_msgs::PoseStamped>("move_base_simple/goal",100);
-  points_nav_pub = n.advertise<std_msgs::Bool>("points_nav_start_flag", 10);
-  points_nav_sub = n.subscribe("points_nav_start_flag", 10, &QNode::run_points_nav_callback,this);
+    // Add your ros communications here.
+      QString odom_topic="odom";
+      QString power_topic="hunter_status";
+      power_min="22.5 ";
+      power_max="26.8";
+      cmdVel_sub = n.subscribe<nav_msgs::Odometry>(odom_topic.toStdString(),200,&QNode::speedCallback,this);
+      power_sub=n.subscribe(power_topic.toStdString(),1000,&QNode::powerCallback,this);
+      pos_sub=n.subscribe("amcl_pose",1000,&QNode::poseCallback,this);
+      cmd_vel_pub=n.advertise<geometry_msgs::Twist>("cmd_vel",1000);
+      marker_pub =n.advertise<visualization_msgs::Marker>("marker", 100);
+      single_goal_sub=n.subscribe("single_goal", 100, &QNode::single_goal_callback,this);
+      back_pose_sub  =n.subscribe("back_pose", 100, &QNode::back_pose_callback,this);
+      points_goal_sub=n.subscribe("points_goal", 100, &QNode::points_goal_callback,this);
+      goal_pub=n.advertise<geometry_msgs::PoseStamped>("move_base_simple/goal",100);
+      pub_initialpose = n.advertise<geometry_msgs::PoseWithCovarianceStamped>("/initialpose", 10);
+      points_nav_pub = n.advertise<std_msgs::Bool>("points_nav_start_flag", 10);
+      points_nav_sub = n.subscribe("points_nav_start_flag", 10, &QNode::run_points_nav_callback,this);
+
 	start();
 	return true;
 }
@@ -211,7 +226,7 @@ void QNode::set_goal(double x,double y,double z,double w)
 }
 
 //获得多点巡航的目标信息
-void QNode::get_points_nav_info(std::vector<geometry_msgs::Pose> points_list,int times,int stop_time,bool next_state)
+void QNode::get_points_nav_info(std::vector<geometry_msgs::Pose> points_list,int times,double stop_time,bool next_state)
 {
   run_points_nav_mutex_.lock();
   pose_list = points_list;
@@ -282,8 +297,8 @@ void QNode::run_points_nav(bool flag)
           goal.target_pose.header.stamp = ros::Time::now();
           goal.target_pose.pose = pose_list[run_count_now];
           nav_client.sendGoal(goal);
-          //60S内如果不能达到目标点则放弃该目标点
-          bool finished_within_time = nav_client.waitForResult(ros::Duration(60));
+          //600S内如果不能达到目标点则放弃该目标点
+          bool finished_within_time = nav_client.waitForResult(ros::Duration(600));
           if(!finished_within_time)
           {
             nav_client.cancelGoal();
@@ -468,5 +483,111 @@ void QNode::points_goal_callback(const geometry_msgs::PoseStamped::ConstPtr& msg
 
   //qDebug()<<"test marker pub";
 }
+void QNode::powerCallback(const hunter_msgs::HunterStatus &message_holder)
+{
+    emit power(message_holder.battery_voltage);
+}
+//订阅图片话题，并在label上显示
+void QNode::Sub_Image(QString topic)
+{
+     ros::NodeHandle n;
+     image_transport::ImageTransport it_(n);
+      image_sub1=n.subscribe(topic.toStdString(),100,&QNode::imageCallback0,this);
+      ros::spinOnce();
+}
+//图像话题的回调函数
+void QNode::imageCallback0(const sensor_msgs::CompressedImageConstPtr& msg)
+{
+    cv_bridge::CvImagePtr cv_ptr;
+
+    try
+      {
+        //深拷贝转换为opencv类型
+        cv_ptr = cv_bridge::toCvCopy(msg,sensor_msgs::image_encodings::BGR8);
+        QImage im=Mat2QImage(cv_ptr->image);
+        emit Show_image(im);
+      }
+      catch (cv_bridge::Exception& e)
+      {
+
+        log(Error,("video frame0 exception: "+QString(e.what())).toStdString());
+        return;
+      }
+
+}
+
+QImage QNode::Mat2QImage(cv::Mat const& src)
+{
+  QImage dest(src.cols, src.rows, QImage::Format_ARGB32);
+
+  const float scale = 255.0;
+
+  if (src.depth() == CV_8U) {
+    if (src.channels() == 1) {
+      for (int i = 0; i < src.rows; ++i) {
+        for (int j = 0; j < src.cols; ++j) {
+          int level = src.at<quint8>(i, j);
+          dest.setPixel(j, i, qRgb(level, level, level));
+        }
+      }
+    } else if (src.channels() == 3) {
+      for (int i = 0; i < src.rows; ++i) {
+        for (int j = 0; j < src.cols; ++j) {
+          cv::Vec3b bgr = src.at<cv::Vec3b>(i, j);
+          dest.setPixel(j, i, qRgb(bgr[2], bgr[1], bgr[0]));
+        }
+      }
+    }
+  } else if (src.depth() == CV_32F) {
+    if (src.channels() == 1) {
+      for (int i = 0; i < src.rows; ++i) {
+        for (int j = 0; j < src.cols; ++j) {
+          int level = scale * src.at<float>(i, j);
+          dest.setPixel(j, i, qRgb(level, level, level));
+        }
+      }
+    } else if (src.channels() == 3) {
+      for (int i = 0; i < src.rows; ++i) {
+        for (int j = 0; j < src.cols; ++j) {
+          cv::Vec3f bgr = scale * src.at<cv::Vec3f>(i, j);
+          dest.setPixel(j, i, qRgb(bgr[2], bgr[1], bgr[0]));
+        }
+      }
+    }
+  }
+
+  return dest;
+}
+void QNode::speedCallback(const nav_msgs::Odometry::ConstPtr& msg)
+{
+    emit speed_x(msg->twist.twist.linear.x);
+    emit speed_y(msg->twist.twist.linear.y);
+}
+void QNode::poseCallback(const geometry_msgs::PoseWithCovarianceStamped& pos)
+{
+    emit cposition(pos.pose.pose.position.x,pos.pose.pose.position.y,pos.pose.pose.orientation.z,pos.pose.pose.orientation.w);
+//    qDebug()<<<<" "<<pos.pose.pose.position.y;
+}
+void QNode::setHome(double x,double y,double z,double w)
+{
+    geometry_msgs::PoseWithCovarianceStamped msg_poseinit;
+        msg_poseinit.header.frame_id = "map";
+        msg_poseinit.header.stamp = ros::Time::now();
+        msg_poseinit.pose.pose.position.x = x;
+        msg_poseinit.pose.pose.position.y = y;
+        msg_poseinit.pose.pose.position.z = z;
+        msg_poseinit.pose.pose.orientation.x = 0.0;
+        msg_poseinit.pose.pose.orientation.y = 0.0;
+        msg_poseinit.pose.pose.orientation.z = 0.9;
+        msg_poseinit.pose.pose.orientation.w = w;
+
+        pub_initialpose.publish(msg_poseinit);
+        ros::Duration(1.0).sleep();
+        pub_initialpose.publish(msg_poseinit);
+        ros::Duration(1.0).sleep();
+        pub_initialpose.publish(msg_poseinit);
+        ros::Duration(1.0).sleep();
+}
 
 }  // namespace robot_one
+

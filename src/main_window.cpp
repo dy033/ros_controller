@@ -10,22 +10,21 @@
 *****************************************************************************/
 
 /***********************************************************************************************************
-  ROS人机交互软件,'RobotOne'
+
 （1）新建地图、保存地图、编辑地图
 （2）设置单点导航、多点巡航、保存设置内容
 （3）类rviz设计，可视化操作
 （4）键盘控制节点
 （5）自定义功能、自定义单点导航名字
-  =============公众号：小白学移动机器人========================================================================
-  欢迎关注公众号，从此学习的路上变得不再孤单，加油！奥利给！！！
-  修改时间：2021年04月05日
+
 ***********************************************************************************************************/
 
 #include <QtGui>
 #include <QMessageBox>
 #include <iostream>
 #include "../include/robot_one/main_window.hpp"
-
+//#include "../include/robot_one/qstopthread.hpp"
+#include <QtConcurrent/QtConcurrent>
 /*****************************************************************************
 ** Namespaces
 *****************************************************************************/
@@ -43,6 +42,7 @@ QImage *img_nav_state_2 = new QImage;
 std::vector<MyPose> single_nav_goals(12);
 //返航点存储
 MyPose back_pose;
+MyPose current_pose;
 //多点导航存储
 std::vector<MyPose> points_nav_goals;
 
@@ -70,7 +70,7 @@ MainWindow::MainWindow(int argc, char** argv, QWidget *parent)
   QObject::connect(&qnode, SIGNAL(loggingUpdated()), this, SLOT(updateLoggingView()));
 
   //设置主窗口的名字
-  this->setWindowTitle("Robot_One - 公众号:小白学移动机器人，关注公众号，获得更多优秀内容！");
+  this->setWindowTitle("无人车人机交互软件");
   //未开启rosmaster
   roscore_state = false;
   //默认离线图片
@@ -93,35 +93,68 @@ MainWindow::MainWindow(int argc, char** argv, QWidget *parent)
   if ( ui.checkbox_remember_settings->isChecked() ) {
       on_button_connect_clicked();
   }
+  m_DashBoard_x =new CCtrlDashBoard(ui.widget_speed_x);
+  m_DashBoard_x->setGeometry(ui.widget_speed_x->rect());
+  m_DashBoard_x->setValue(0);
+  m_DashBoard_y =new CCtrlDashBoard(ui.widget_speed_y);
+  m_DashBoard_y->setGeometry(ui.widget_speed_y->rect());
+  m_DashBoard_y->setValue(0);
 
   //========================================按键控制部分===================================
 
   ui.horizontalSlider_linera->setValue(25);
   ui.horizontalSlider_raw->setValue(50);
-  ui.label_linera->setText("25");
+  ui.label_linear->setText("25");
   ui.label_raw->setText("50");
+  m_timerCurrentTime = new QTimer;
+  m_timerCurrentTime->setInterval(100);
+  m_timerCurrentTime->start();
+  //当前时间
+  QObject::connect(m_timerCurrentTime,&QTimer::timeout,[=](){
+      ui.label_time->setText(QDateTime::currentDateTime().toString("  hh:mm:ss  "));
+  });
   //线速度和角速度的进度条
   connect(ui.horizontalSlider_linera,SIGNAL(valueChanged(int)),this,SLOT(slot_linera_value_change(int)));
   connect(ui.horizontalSlider_raw,SIGNAL(valueChanged(int)),this,SLOT(slot_raw_value_change(int)));
 
+  //connect速度的信号
+  connect(&qnode,SIGNAL(speed_x(double)),this,SLOT(slot_speed_x(double)));
+  connect(&qnode,SIGNAL(speed_y(double)),this,SLOT(slot_speed_y(double)));
   //按下发送控制速度
-  connect(ui.pushButton_i, SIGNAL(pressed()),this,SLOT(slot_ctrl_btn_press()));
-  connect(ui.pushButton_j, SIGNAL(pressed()),this,SLOT(slot_ctrl_btn_press()));
-  connect(ui.pushButton_l, SIGNAL(pressed()),this,SLOT(slot_ctrl_btn_press()));
-  connect(ui.pushButton_n, SIGNAL(pressed()),this,SLOT(slot_ctrl_btn_press()));
-  connect(ui.pushButton_m, SIGNAL(pressed()),this,SLOT(slot_ctrl_btn_press()));
-  connect(ui.pushButton_br,SIGNAL(pressed()),this,SLOT(slot_ctrl_btn_press()));
-  connect(ui.pushButton_u, SIGNAL(pressed()),this,SLOT(slot_ctrl_btn_press()));
-  connect(ui.pushButton_o, SIGNAL(pressed()),this,SLOT(slot_ctrl_btn_press()));
+//  connect(ui.pushButton_i, SIGNAL(pressed()),this,SLOT(slot_ctrl_btn_press()));
+//  connect(ui.pushButton_j, SIGNAL(pressed()),this,SLOT(slot_ctrl_btn_press()));
+//  connect(ui.pushButton_l, SIGNAL(pressed()),this,SLOT(slot_ctrl_btn_press()));
+//  connect(ui.pushButton_n, SIGNAL(pressed()),this,SLOT(slot_ctrl_btn_press()));
+//  connect(ui.pushButton_m, SIGNAL(pressed()),this,SLOT(slot_ctrl_btn_press()));
+//  connect(ui.pushButton_br,SIGNAL(pressed()),this,SLOT(slot_ctrl_btn_press()));
+//  connect(ui.pushButton_u, SIGNAL(pressed()),this,SLOT(slot_ctrl_btn_press()));
+//  connect(ui.pushButton_o, SIGNAL(pressed()),this,SLOT(slot_ctrl_btn_press()));
+
+  connect(ui.pushButton_i, SIGNAL(clicked()),this,SLOT(slot_ctrl_btn_press()));
+  connect(ui.pushButton_j, SIGNAL(clicked()),this,SLOT(slot_ctrl_btn_press()));
+  connect(ui.pushButton_l, SIGNAL(clicked()),this,SLOT(slot_ctrl_btn_press()));
+  connect(ui.pushButton_n, SIGNAL(clicked()),this,SLOT(slot_ctrl_btn_press()));
+  connect(ui.pushButton_m, SIGNAL(clicked()),this,SLOT(slot_ctrl_btn_press()));
+  connect(ui.pushButton_br,SIGNAL(clicked()),this,SLOT(slot_ctrl_btn_press()));
+  connect(ui.pushButton_u, SIGNAL(clicked()),this,SLOT(slot_ctrl_btn_press()));
+  connect(ui.pushButton_o, SIGNAL(clicked()),this,SLOT(slot_ctrl_btn_press()));
+  connect(ui.foucs_camera_btn,SIGNAL(clicked()),this,SLOT(slot_foucs_camera_btn()));
+  connect(ui.set_select_btn,SIGNAL(clicked()),this,SLOT(slot_select_btn()));
+
   //释放发送0
-  connect(ui.pushButton_i, SIGNAL(released()),this,SLOT(slot_ctrl_btn_release()));
-  connect(ui.pushButton_j, SIGNAL(released()),this,SLOT(slot_ctrl_btn_release()));
-  connect(ui.pushButton_l, SIGNAL(released()),this,SLOT(slot_ctrl_btn_release()));
-  connect(ui.pushButton_n, SIGNAL(released()),this,SLOT(slot_ctrl_btn_release()));
-  connect(ui.pushButton_m, SIGNAL(released()),this,SLOT(slot_ctrl_btn_release()));
-  connect(ui.pushButton_br,SIGNAL(released()),this,SLOT(slot_ctrl_btn_release()));
-  connect(ui.pushButton_u, SIGNAL(released()),this,SLOT(slot_ctrl_btn_release()));
-  connect(ui.pushButton_o, SIGNAL(released()),this,SLOT(slot_ctrl_btn_release()));
+//  connect(ui.pushButton_i, SIGNAL(released()),this,SLOT(slot_ctrl_btn_release()));
+//  connect(ui.pushButton_j, SIGNAL(released()),this,SLOT(slot_ctrl_btn_release()));
+//  connect(ui.pushButton_l, SIGNAL(released()),this,SLOT(slot_ctrl_btn_release()));
+//  connect(ui.pushButton_n, SIGNAL(released()),this,SLOT(slot_ctrl_btn_release()));
+//  connect(ui.pushButton_m, SIGNAL(released()),this,SLOT(slot_ctrl_btn_release()));
+//  connect(ui.pushButton_br,SIGNAL(released()),this,SLOT(slot_ctrl_btn_release()));
+//  connect(ui.pushButton_u, SIGNAL(released()),this,SLOT(slot_ctrl_btn_release()));
+//  connect(ui.pushButton_o, SIGNAL(released()),this,SLOT(slot_ctrl_btn_release()));
+  //图片信号
+  connect(&qnode,SIGNAL(Show_image(QImage)),this,SLOT(slot_show_image(QImage)));
+
+  //电源的信号
+  connect(&qnode,SIGNAL(power(float)),this,SLOT(slot_power(float)));
 
 
   //=====================================设置按钮图标======================================
@@ -165,17 +198,7 @@ MainWindow::MainWindow(int argc, char** argv, QWidget *parent)
   img_nav_state_2->load("://images/forbidden.png");
   ui.label_nav_state_2->setPixmap(QPixmap::fromImage(*img_nav_state_2));
 
-  //设置开始页面图片
-  QImage *img = new QImage;
-  img->load("://images/robot_start_2.jpg");
-  ui.label_start_img->setScaledContents(true);
-  ui.label_start_img->setPixmap(QPixmap::fromImage(*img));
 
-  //设置公众号页面图片
-  QImage *img_ad = new QImage;
-  img_ad->load("://png/gongzhonghao.png");
-  ui.label_ad_img->setScaledContents(true);
-  ui.label_ad_img->setPixmap(QPixmap::fromImage(*img_ad));
 
   //设置treeWidget
   //header
@@ -192,6 +215,8 @@ MainWindow::MainWindow(int argc, char** argv, QWidget *parent)
   QTreeWidgetItem* Fixed_frame=new QTreeWidgetItem(QStringList()<<"Fixed Frame");
   fixed_box=new QComboBox();
   fixed_box->addItem("map");
+//  fixed_box->addItem("velodyne");
+//  fixed_box->addItem("map");
   fixed_box->setMaximumWidth(100);
   fixed_box->setEditable(true);
   Global->addChild(Fixed_frame);
@@ -204,6 +229,7 @@ MainWindow::MainWindow(int argc, char** argv, QWidget *parent)
   Grid->setIcon(0,QIcon("://images/classes/Grid.png"));
   //checkbox
   Grid_Check=new QCheckBox();
+  Grid_Check->setCheckState(Qt::Checked);
   connect(Grid_Check,SIGNAL(stateChanged(int)),this,SLOT(slot_display_grid(int)));
   //添加top节点
   ui.treeWidget->addTopLevelItem(Grid);
@@ -217,7 +243,9 @@ MainWindow::MainWindow(int argc, char** argv, QWidget *parent)
   Grid->addChild(Cell_Count);
   //CellCount添加SpinBox
   Cell_Count_Box=new QSpinBox();
-  Cell_Count_Box->setValue(13);
+  Cell_Count_Box->setValue(100);
+  //设置cell_count最大值，不设置则最大值为99
+  Cell_Count_Box->setMaximum(999999);
   //设置Spinbox的宽度
   Cell_Count_Box->setMaximumWidth(150);
   ui.treeWidget->setItemWidget(Cell_Count,1,Cell_Count_Box);
@@ -227,7 +255,7 @@ MainWindow::MainWindow(int argc, char** argv, QWidget *parent)
   Grid->addChild(Grid_Color);
   //Color添加ComboBox
   Grid_Color_Box=new QComboBox();
-  Grid_Color_Box->addItem("160;160;160");
+  Grid_Color_Box->addItem("160;160;164");
   //设置Comboox可编辑
   Grid_Color_Box->setEditable(true);
   //设置Combox的宽度
@@ -240,6 +268,7 @@ MainWindow::MainWindow(int argc, char** argv, QWidget *parent)
   TF->setIcon(0,QIcon("://images/classes/TF.png"));
   //checkbox
   QCheckBox* TF_Check=new QCheckBox();
+  TF_Check->setCheckState(Qt::Unchecked);
   connect(TF_Check,SIGNAL(stateChanged(int)),this,SLOT(slot_display_tf(int)));
   //向Treewidget添加TF Top节点
   ui.treeWidget->addTopLevelItem(TF);
@@ -252,6 +281,7 @@ MainWindow::MainWindow(int argc, char** argv, QWidget *parent)
   LaserScan->setIcon(0,QIcon("://images/classes/LaserScan.png"));
   //checkbox
   QCheckBox* Laser_Check=new QCheckBox();
+  Laser_Check->setCheckState(Qt::Checked);
   connect(Laser_Check,SIGNAL(stateChanged(int)),this,SLOT(slot_display_laser(int)));
   //向Treewidget添加TF Top节点
   ui.treeWidget->addTopLevelItem(LaserScan);
@@ -272,6 +302,7 @@ MainWindow::MainWindow(int argc, char** argv, QWidget *parent)
   Map->setIcon(0,QIcon("://images/classes/Map.png"));
   //checkbox
   Map_Check=new QCheckBox();
+  Map_Check->setCheckState(Qt::Checked);
   connect(Map_Check,SIGNAL(stateChanged(int)),this,SLOT(slot_display_Map(int)));
   //向Treewidget添加Map Top节点
   ui.treeWidget->addTopLevelItem(Map);
@@ -295,12 +326,13 @@ MainWindow::MainWindow(int argc, char** argv, QWidget *parent)
   Map->addChild(MapColorScheme);
   ui.treeWidget->setItemWidget(MapColorScheme,1,Map_Color_Scheme_box);
 
-  //Marker
+
   QTreeWidgetItem* Marker=new QTreeWidgetItem(QStringList()<<"Marker");
   //设置图标
   Marker->setIcon(0,QIcon("://images/classes/Marker.png"));
   //checkbox
   QCheckBox* Marker_Check=new QCheckBox();
+  Marker_Check->setCheckState(Qt::Checked);
   connect(Marker_Check,SIGNAL(stateChanged(int)),this,SLOT(slot_display_marker(int)));
   //向Treewidget添加Marker Top节点
   ui.treeWidget->addTopLevelItem(Marker);
@@ -315,8 +347,36 @@ MainWindow::MainWindow(int argc, char** argv, QWidget *parent)
   Marker->addChild(MarkerTopic);
   ui.treeWidget->setItemWidget(MarkerTopic,1,Marker_Topic_box);
 
+
+
+  //Path
+  QTreeWidgetItem* Path=new QTreeWidgetItem(QStringList()<<"Path");
+  //设置图标
+  Path->setIcon(0,QIcon("://images/classes/Path.png"));
+  //checkbox
+  QCheckBox* Path_Check=new QCheckBox();
+  Path_Check->setCheckState(Qt::Checked);
+  connect(Path_Check,SIGNAL(stateChanged(int)),this,SLOT(slot_display_path(int)));
+  //向Treewidget添加TF Top节点
+  ui.treeWidget->addTopLevelItem(Path);
+  //向TF添加checkbox
+  ui.treeWidget->setItemWidget(Path,1,Path_Check);
+  //path topic
+  QTreeWidgetItem* PathTopic=new QTreeWidgetItem(QStringList()<<"Topic");
+  Path_Topic_box=new QComboBox();
+  Path_Topic_box->addItem("/move_base/NavfnROS/plan");
+  Path_Topic_box->setEditable(true);
+  Path_Topic_box->setMaximumWidth(150);
+  Path->addChild(PathTopic);
+  ui.treeWidget->setItemWidget(PathTopic,1,Path_Topic_box);
+
+
+  //****************************************************************************************//
+
   //connect
   connect(&qnode,SIGNAL(position(double,double,double,double)),this,SLOT(slot_update_onepoint_nav_pos(double,double,double,double)));
+  //机器人位置信号
+  connect(&qnode,SIGNAL(cposition(double,double,double,double)),this,SLOT(slot_position_change(double,double,double,double)));
   connect(&qnode,SIGNAL(back_position(double,double,double,double)),this,SLOT(slot_update_back_nav_pos(double,double,double,double)));
   connect(&qnode,SIGNAL(points_nav_position(double,double,double,double)),this,SLOT(slot_update_points_nav_pos(double,double,double,double)));
   //new cmd
@@ -378,6 +438,21 @@ void MainWindow::setButtonsEnable(bool state)
   ui.D02_btn->setEnabled(state);
   ui.D03_btn->setEnabled(state);
 }
+
+void MainWindow::slot_speed_x(double x)
+{
+    if(x>=0) ui.label_dir_x->setText("正向");
+    else ui.label_dir_x->setText("反向");
+
+    m_DashBoard_x->setValue(abs(x*100));
+}
+void MainWindow::slot_speed_y(double x)
+{
+    if(x>=0) ui.label_dir_y->setText("正向");
+    else ui.label_dir_y->setText("反向");
+    m_DashBoard_y->setValue(abs(x*100));
+}
+
 
 //将多点导航的路径绘制出来
 void MainWindow::drawNavPath()
@@ -465,6 +540,8 @@ void MainWindow::on_button_connect_clicked() {
   //激活相关按钮
   if(roscore_state) setButtonsEnable(true);
   else setButtonsEnable(false);
+  //设置图像话题
+  qnode.Sub_Image("/image_raw/compressed");
 
 }
 
@@ -479,7 +556,16 @@ void MainWindow::on_checkbox_use_environment_stateChanged(int state) {
 	ui.line_edit_host->setEnabled(enabled);
 	//ui.line_edit_topic->setEnabled(enabled);
 }
-
+void MainWindow::slot_foucs_camera_btn()
+{
+    myrviz->Set_FoucsCamera();
+//    qDebug()<<"move camera";
+}
+void MainWindow::slot_select_btn()
+{
+    myrviz->Set_Select();
+//    qDebug()<<"move camera";
+}
 void MainWindow::slot_treewidget_value_change(QString)
 {
     myrviz->Set_FixedFrame(fixed_box->currentText());
@@ -505,6 +591,12 @@ void MainWindow::slot_display_laser(int state)
     myrviz->Display_LaserScan(Laser_Topic_box->currentText(),enable);
 }
 
+void MainWindow::slot_display_path(int state)
+{
+    bool enable=state>1?true:false;
+    myrviz->Display_Path(Path_Topic_box->currentText(),enable);
+}
+
 void MainWindow::slot_display_Map(int state)
 {
     bool enable=state>1?true:false;
@@ -517,12 +609,16 @@ void MainWindow::slot_display_marker(int state)
     myrviz->Display_Marker(Marker_Topic_box->currentText(),enable);
 }
 
+
+
+
+
 void MainWindow::slot_ctrl_btn_press()
 {
   QPushButton* btn=qobject_cast<QPushButton*> (sender());
   char k=btn->text().toStdString()[0];
   bool is_all=ui.checkBox_is_all->isChecked();
-  float linear=ui.label_linera->text().toFloat()*0.01;
+  float linear=ui.label_linear->text().toFloat()*0.01;
   float angular=ui.label_raw->text().toFloat()*0.01;
 
   switch (k) {
@@ -560,7 +656,7 @@ void MainWindow::slot_ctrl_btn_release()
 
 void MainWindow::slot_linera_value_change(int value)
 {
-    ui.label_linera->setText(QString::number(value));
+    ui.label_linear->setText(QString::number(value));
 }
 
 void MainWindow::slot_raw_value_change(int value)
@@ -648,6 +744,36 @@ void MainWindow::slot_update_points_nav_pos(double x,double y,double z,double w)
   drawNavPath();
 }
 
+void MainWindow::slot_power(float p)
+{
+    ui.label_power->setText(QString::number(p).mid(0,5)+"V");
+    double n=(p-22.5)/4.3;
+    int value=n*100;
+    ui.progressBar->setValue(value>100?100:value);
+    //当电量过低时发出提示
+    if(n*100<=10)
+    {
+         ui.progressBar->setStyleSheet("QProgressBar::chunk {background-color: red;width: 20px;} QProgressBar {border: 2px solid grey;border-radius: 5px;text-align: center;}");
+
+//         QMessageBox::warning(NULL, "电量不足", "电量不足，请及时充电！", QMessageBox::Yes , QMessageBox::Yes);
+
+    }
+    else{
+        ui.progressBar->setStyleSheet("QProgressBar {border: 2px solid grey;border-radius: 5px;text-align: center;}");
+
+    }
+}
+//刷新当前坐标
+void MainWindow::slot_position_change(double x,double y,double z,double w)
+{
+    //更新ui显示
+
+    ui.label_pose_x_2->setText(QString::number(x));
+    ui.label_pose_y_2->setText(QString::number(y));
+    ui.label_pose_z_2->setText(QString::number(z));
+    ui.label_pose_w_2->setText(QString::number(w));
+}
+
 /*****************************************************************************
 ** Implemenation [Slots][manually connected]
 *****************************************************************************/
@@ -726,6 +852,11 @@ void MainWindow::ReadSettings() {
     back_pose.y = settings.value("back_pose_y",0.0).toDouble();
     back_pose.z = settings.value("back_pose_z",0.0).toDouble();
     back_pose.w = settings.value("back_pose_w",0.0).toDouble();
+    //读-返航点位置
+    current_pose.x = settings.value("pose_x",0.0).toDouble();
+    current_pose.y = settings.value("pose_y",0.0).toDouble();
+    current_pose.z = settings.value("pose_z",0.0).toDouble();
+    current_pose.w = settings.value("pose_w",0.0).toDouble();
 
     //读-单点导航位置
     points_nav_goals.resize(settings.value("points_nav_size",0.0).toUInt());
@@ -784,6 +915,11 @@ void MainWindow::WriteSettings() {
     settings.setValue("back_pose_y",QVariant(back_pose.y));
     settings.setValue("back_pose_z",QVariant(back_pose.z));
     settings.setValue("back_pose_w",QVariant(back_pose.w));
+    //写-点位置
+    settings.setValue("pose_x",ui.label_pose_x_2->text());
+    settings.setValue("pose_y",ui.label_pose_y_2->text());
+    settings.setValue("pose_z",ui.label_pose_z_2->text());
+    settings.setValue("pose_w",ui.label_pose_w_2->text());
     //写-多点导航位置
     settings.setValue("points_nav_size",QVariant(static_cast<double>(points_nav_goals.size())));
     for (unsigned long i=0;i<points_nav_goals.size();++i)
@@ -793,6 +929,11 @@ void MainWindow::WriteSettings() {
        settings.setValue("points_nav_"+QString::number(i)+"_z",QVariant(points_nav_goals[i].z));
        settings.setValue("points_nav_"+QString::number(i)+"_w",QVariant(points_nav_goals[i].w));
     }
+}
+//图像处理槽函数
+void MainWindow::slot_show_image( QImage image)
+{
+    ui.label_video0->setPixmap(QPixmap::fromImage(image).scaled(ui.label_video0->width(),ui.label_video0->height()));
 }
 
 void MainWindow::closeEvent(QCloseEvent *event)
@@ -906,7 +1047,7 @@ void robot_one::MainWindow::on_launch_nav_one_btn_clicked()
 {
   launch_onepoint_nav_cmd->start("bash");
   launch_onepoint_nav_cmd->waitForStarted();                         //等待启动完成
-  launch_onepoint_nav_cmd->write(ui.textEdit_launch_nav->toPlainText().toLocal8Bit()+'\n');
+//  launch_onepoint_nav_cmd->write(ui.textEdit_launch_nav->toPlainText().toLocal8Bit()+'\n');
 
   connect(launch_onepoint_nav_cmd,SIGNAL(readyReadStandardError()),this, SLOT(slot_quick_output()));
   connect(launch_onepoint_nav_cmd,SIGNAL(readyReadStandardOutput()),this,SLOT(slot_quick_output()));
@@ -915,6 +1056,7 @@ void robot_one::MainWindow::on_launch_nav_one_btn_clicked()
   ui.label_nav_state_1->setPixmap(QPixmap::fromImage(*img_nav_state_1));
   //仅可以按一次
   ui.launch_nav_one_btn->setEnabled(false);
+  ui.stop_nav_one_btn->setEnabled(true);
 }
 
 //stop nav 取消当前导航点
@@ -922,13 +1064,15 @@ void robot_one::MainWindow::on_stop_nav_one_btn_clicked()
 {
   launch_stop_nav_cmd->start("bash");
   launch_stop_nav_cmd->waitForStarted();                         //等待启动完成
-  launch_stop_nav_cmd->write(ui.textEdit_stop_nav->toPlainText().toLocal8Bit()+'\n');
-
+//  launch_stop_nav_cmd->write(ui.textEdit_stop_nav->toPlainText().toLocal8Bit()+'\n');
+  qnode.set_goal(NULL,NULL,NULL,NULL);
   connect(launch_stop_nav_cmd,SIGNAL(readyReadStandardError()),this, SLOT(slot_quick_output()));
   connect(launch_stop_nav_cmd,SIGNAL(readyReadStandardOutput()),this,SLOT(slot_quick_output()));
 
   img_nav_state_1->load("://images/error.png");
   ui.label_nav_state_1->setPixmap(QPixmap::fromImage(*img_nav_state_1));
+  ui.launch_nav_one_btn->setEnabled(true);
+   ui.stop_nav_one_btn->setEnabled(false);
 }
 
 //back nav
@@ -965,7 +1109,7 @@ void robot_one::MainWindow::on_launch_nav_points_btn_clicked()
 
     qnode.get_points_nav_info(tempPoseList,
                               ui.lineEdit_points_nav_num->text().toInt(),
-                              ui.lineEdit_points_nav_stop_time->text().toInt(),
+                              ui.lineEdit_points_nav_stop_time->text().toDouble()>0?ui.lineEdit_points_nav_stop_time->text().toDouble():0.01,
                               ui.checkBox_nav_next_flag->isChecked());
     //qDebug()<<ui.checkBox_nav_next_flag->isChecked();
 
@@ -974,7 +1118,10 @@ void robot_one::MainWindow::on_launch_nav_points_btn_clicked()
   else
   {
     //继续巡航任务
-    qnode.set_stop_points_nav(false);
+//    qnode.set_stop_points_nav(false);
+    QtConcurrent::run([&](){
+        qnode.set_stop_points_nav(false);
+    });
   }
 
   img_nav_state_2->load("://images/robot2.png");
@@ -985,9 +1132,15 @@ void robot_one::MainWindow::on_launch_nav_points_btn_clicked()
 void robot_one::MainWindow::on_stop_nav_points_btn_clicked()
 {
   //暂停当前巡航任务
-  qnode.set_stop_points_nav(true);
+//    QStopThread* sthread=new QStopThread(&qnode);
+//    sthread->start();
+    QtConcurrent::run([&](){
+        qnode.set_stop_points_nav(true);
+    });
   img_nav_state_2->load("://images/error.png");
+//  qnode.set_goal(NULL,NULL,NULL,NULL);
   ui.label_nav_state_2->setPixmap(QPixmap::fromImage(*img_nav_state_2));
+
 }
 
 //next flag on nav
@@ -1011,62 +1164,74 @@ void robot_one::MainWindow::on_back_nav_points_btn_clicked()
 //用官方的写法可以不用写connect函数,可以直接触发槽函数
 void robot_one::MainWindow::on_A01_btn_clicked()
 {
+    qnode.set_goal(NULL,NULL,NULL,NULL);
   //qDebug() << "on_A01_btn_clicked";
   qnode.set_goal(single_nav_goals[0].x,single_nav_goals[0].y,single_nav_goals[0].z,single_nav_goals[0].w);
 }
 
 void robot_one::MainWindow::on_A02_btn_clicked()
 {
+    qnode.set_goal(NULL,NULL,NULL,NULL);
   qnode.set_goal(single_nav_goals[1].x,single_nav_goals[1].y,single_nav_goals[1].z,single_nav_goals[1].w);
 }
 
 void robot_one::MainWindow::on_A03_btn_clicked()
 {
+    qnode.set_goal(NULL,NULL,NULL,NULL);
   qnode.set_goal(single_nav_goals[2].x,single_nav_goals[2].y,single_nav_goals[2].z,single_nav_goals[2].w);
 }
 
 void robot_one::MainWindow::on_B01_btn_clicked()
 {
+    qnode.set_goal(NULL,NULL,NULL,NULL);
   qnode.set_goal(single_nav_goals[3].x,single_nav_goals[3].y,single_nav_goals[3].z,single_nav_goals[3].w);
 }
 
 void robot_one::MainWindow::on_B02_btn_clicked()
 {
+    qnode.set_goal(NULL,NULL,NULL,NULL);
   qnode.set_goal(single_nav_goals[4].x,single_nav_goals[4].y,single_nav_goals[4].z,single_nav_goals[4].w);
 }
 
 void robot_one::MainWindow::on_B03_btn_clicked()
 {
+    qnode.set_goal(NULL,NULL,NULL,NULL);
   qnode.set_goal(single_nav_goals[5].x,single_nav_goals[5].y,single_nav_goals[5].z,single_nav_goals[5].w);
 }
 
 void robot_one::MainWindow::on_C01_btn_clicked()
 {
+    qnode.set_goal(NULL,NULL,NULL,NULL);
   qnode.set_goal(single_nav_goals[6].x,single_nav_goals[6].y,single_nav_goals[6].z,single_nav_goals[6].w);
 }
 
 void robot_one::MainWindow::on_C02_btn_clicked()
 {
+    qnode.set_goal(NULL,NULL,NULL,NULL);
   qnode.set_goal(single_nav_goals[7].x,single_nav_goals[7].y,single_nav_goals[7].z,single_nav_goals[7].w);
 }
 
 void robot_one::MainWindow::on_C03_btn_clicked()
 {
+    qnode.set_goal(NULL,NULL,NULL,NULL);
   qnode.set_goal(single_nav_goals[8].x,single_nav_goals[8].y,single_nav_goals[8].z,single_nav_goals[8].w);
 }
 
 void robot_one::MainWindow::on_D01_btn_clicked()
 {
+    qnode.set_goal(NULL,NULL,NULL,NULL);
   qnode.set_goal(single_nav_goals[9].x,single_nav_goals[9].y,single_nav_goals[9].z,single_nav_goals[9].w);
 }
 
 void robot_one::MainWindow::on_D02_btn_clicked()
 {
+    qnode.set_goal(NULL,NULL,NULL,NULL);
   qnode.set_goal(single_nav_goals[10].x,single_nav_goals[10].y,single_nav_goals[10].z,single_nav_goals[10].w);
 }
 
 void robot_one::MainWindow::on_D03_btn_clicked()
 {
+    qnode.set_goal(NULL,NULL,NULL,NULL);
   qnode.set_goal(single_nav_goals[11].x,single_nav_goals[11].y,single_nav_goals[11].z,single_nav_goals[11].w);
 }
 
@@ -1074,3 +1239,5 @@ void robot_one::MainWindow::on_checkBox_nav_next_flag_stateChanged(int arg1)
 {
   ui.next_nav_points_btn->setEnabled(arg1);
 }
+
+
